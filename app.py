@@ -1,12 +1,10 @@
 import streamlit as st
 import os
-from dotenv import load_dotenv, set_key
+from dotenv import load_dotenv
 from analyzer.scraper import scrape_page
 from analyzer.ai_judge import get_ai_judgment
 
 load_dotenv()
-
-ENV_PATH = os.path.join(os.path.dirname(__file__), '.env')
 
 st.set_page_config(
     page_title="SEO・LLMO診断ツール",
@@ -37,40 +35,39 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ===== APIキー管理 =====
-saved_key = os.getenv('GEMINI_API_KEY', '')
 
+def get_gemini_key() -> str:
+    """Streamlit secrets → 環境変数 → セッション入力 の順で取得"""
+    try:
+        return st.secrets["GEMINI_API_KEY"]
+    except Exception:
+        pass
+    env_key = os.getenv('GEMINI_API_KEY', '')
+    if env_key:
+        return env_key
+    return st.session_state.get('gemini_key', '')
+
+
+# ===== サイドバー =====
 with st.sidebar:
     st.header("⚙️ 設定")
+    gemini_key = get_gemini_key()
 
-    if saved_key:
-        st.success("✅ Gemini APIキー設定済み")
-        gemini_key = saved_key
-        if st.button("🔑 APIキーを変更"):
-            st.session_state['change_key'] = True
+    if gemini_key:
+        st.success("✅ AIエンジン接続済み")
     else:
-        st.session_state['change_key'] = True
-
-    if st.session_state.get('change_key'):
-        new_key = st.text_input("Gemini API Key", type="password",
-                                placeholder="AIza...")
-        if st.button("💾 保存", type="primary"):
-            if new_key:
-                if not os.path.exists(ENV_PATH):
-                    open(ENV_PATH, 'w').close()
-                set_key(ENV_PATH, 'GEMINI_API_KEY', new_key)
-                os.environ['GEMINI_API_KEY'] = new_key
-                st.session_state['change_key'] = False
+        st.warning("APIキーが必要です")
+        input_key = st.text_input("Gemini API Key", type="password",
+                                  placeholder="AIza...")
+        if st.button("設定", type="primary"):
+            if input_key:
+                st.session_state['gemini_key'] = input_key
                 st.rerun()
-            else:
-                st.error("APIキーを入力してください")
-        gemini_key = new_key
+        st.divider()
+        st.markdown("[Gemini APIキーを取得](https://aistudio.google.com/)")
 
     st.divider()
-    st.markdown("**Gemini APIキーの取得**")
-    st.markdown("1. [Google AI Studio](https://aistudio.google.com/) にアクセス")
-    st.markdown("2. 「Get API key」をクリック")
-    st.markdown("3. 上の欄に貼り付けて保存")
+    st.caption("Powered by Google Gemini AI")
 
 # ===== メイン =====
 st.title("🔍 SEO・LLMO 無料診断ツール")
@@ -93,7 +90,7 @@ if run:
         st.error("URLは http:// または https:// から始めてください")
         st.stop()
     if not gemini_key:
-        st.error("サイドバーから Gemini API Key を保存してください")
+        st.error("サイドバーから Gemini API Key を入力してください")
         st.stop()
 
     with st.status("診断中...", expanded=True) as status:
@@ -192,6 +189,5 @@ if run:
 
     st.markdown("---")
 
-    # ===== 詳細データ =====
     with st.expander("🔧 技術詳細データ"):
         st.json({k: v for k, v in seo_data.items() if k != 'url'})
