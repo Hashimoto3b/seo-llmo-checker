@@ -92,7 +92,6 @@ def render_issues(issues, show_fix=False):
 with st.sidebar:
     st.header("⚙️ 設定")
     gemini_key = get_gemini_key()
-    search_api_key, search_cx = get_search_keys()
 
     if gemini_key:
         st.success("✅ AIエンジン接続済み")
