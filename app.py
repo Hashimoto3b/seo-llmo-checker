@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from analyzer.scraper import scrape_page
 from analyzer.ai_judge import get_ai_judgment
 from analyzer.keyword_rank import search_keyword, highlight_urls
+
 from analyzer.aio_analyzer import analyze_aio
 from analyzer.meo_analyzer import analyze_meo
 
@@ -48,13 +49,12 @@ def get_gemini_key() -> str:
     return os.getenv('GEMINI_API_KEY', st.session_state.get('gemini_key', ''))
 
 
-def get_search_keys():
+def get_serpapi_key():
     try:
-        return st.secrets.get("GOOGLE_SEARCH_API_KEY", ""), st.secrets.get("GOOGLE_SEARCH_CX", "")
+        return st.secrets.get("SERPAPI_KEY", "")
     except Exception:
         pass
-    return (os.getenv('GOOGLE_SEARCH_API_KEY', st.session_state.get('search_api_key', '')),
-            os.getenv('GOOGLE_SEARCH_CX', st.session_state.get('search_cx', '')))
+    return os.getenv('SERPAPI_KEY', st.session_state.get('serpapi_key', ''))
 
 
 def score_css(s):
@@ -106,19 +106,16 @@ with st.sidebar:
 
     st.divider()
 
-    if search_api_key and search_cx:
+    serpapi_key = get_serpapi_key()
+    if serpapi_key:
         st.success("✅ キーワード検索設定済み")
     else:
         with st.expander("🔑 キーワード順位設定（任意）"):
-            k2 = st.text_input("Google Search API Key", type="password",
-                               value=search_api_key)
-            cx2 = st.text_input("Search Engine ID (cx)",
-                                value=search_cx)
+            k2 = st.text_input("SerpAPI Key", type="password")
             if st.button("キーワード設定を保存"):
-                st.session_state['search_api_key'] = k2
-                st.session_state['search_cx'] = cx2
+                st.session_state['serpapi_key'] = k2
                 st.rerun()
-            st.caption("[取得方法を見る →](https://programmablesearchengine.google.com/)")
+            st.caption("[SerpAPI無料登録 →](https://serpapi.com)")
 
     st.divider()
     st.caption("Powered by Google Gemini AI")
@@ -214,14 +211,14 @@ with tab1:
 with tab2:
     st.subheader("🔎 キーワード検索順位確認")
 
-    if not (search_api_key and search_cx):
-        st.info("サイドバーの「キーワード順位設定」にGoogle Search APIキーとSearch Engine IDを入力すると利用できます。")
+    serpapi_key = get_serpapi_key()
+    if not serpapi_key:
+        st.info("サイドバーの「キーワード順位設定」にSerpAPI Keyを入力すると利用できます。")
         st.markdown("""
-        **設定手順（無料・100回/日）**
-        1. [Programmable Search Engine](https://programmablesearchengine.google.com/) でSearch Engineを作成
-        2. 「ウェブ全体を検索」に設定して **Search Engine ID (cx)** をコピー
-        3. [Google Cloud Console](https://console.cloud.google.com/) で **Custom Search JSON API** を有効化してAPIキーを取得
-        4. サイドバーに両方を入力して保存
+        **設定手順（無料・100回/月）**
+        1. [serpapi.com](https://serpapi.com) で無料登録
+        2. ダッシュボードの **API Key** をコピー
+        3. サイドバーに入力して保存
         """)
     else:
         kw = st.text_input("検索キーワード", placeholder="どさんこシェフ", key="kw")
@@ -244,7 +241,7 @@ with tab2:
                 st.stop()
 
             with st.spinner("検索中..."):
-                data = search_keyword(kw, search_api_key, search_cx, num_results)
+                data = search_keyword(kw, serpapi_key, num_results)
 
             if 'error' in data:
                 st.error(f"検索エラー: {data['error']}")

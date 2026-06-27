@@ -2,51 +2,42 @@ import requests
 from urllib.parse import urlparse
 
 
-def search_keyword(keyword: str, api_key: str, cx: str, num: int = 20) -> dict:
-    """Google Custom Search APIでキーワード検索して順位を返す"""
-    endpoint = 'https://www.googleapis.com/customsearch/v1'
+def search_keyword(keyword: str, api_key: str, num: int = 20) -> dict:
+    """SerpAPIでキーワード検索して順位を返す"""
+    endpoint = 'https://serpapi.com/search'
     results = []
 
-    # 10件ずつ2回取得（最大20件）
-    for start in [1, 11]:
-        if start == 11 and num <= 10:
-            break
-        params = {
-            'key': api_key,
-            'cx': cx,
-            'q': keyword,
-            'num': min(10, num - start + 1),
-            'start': start,
-            'lr': 'lang_ja',
-            'gl': 'jp',
-        }
-        try:
-            res = requests.get(endpoint, params=params, timeout=15)
-            data = res.json()
+    params = {
+        'q': keyword,
+        'api_key': api_key,
+        'engine': 'google',
+        'hl': 'ja',
+        'gl': 'jp',
+        'num': min(num, 20),
+    }
 
-            if 'error' in data:
-                return {'error': data['error'].get('message', 'APIエラー')}
+    try:
+        res = requests.get(endpoint, params=params, timeout=30)
+        data = res.json()
 
-            items = data.get('items', [])
-            for i, item in enumerate(items):
-                rank = start + i
-                url = item.get('link', '')
-                domain = urlparse(url).netloc
-                results.append({
-                    'rank': rank,
-                    'title': item.get('title', ''),
-                    'url': url,
-                    'domain': domain,
-                    'snippet': item.get('snippet', '').replace('\n', ' '),
-                })
+        if 'error' in data:
+            return {'error': data['error']}
 
-            if len(items) < 10:
-                break
+        organic = data.get('organic_results', [])
+        for i, item in enumerate(organic):
+            url = item.get('link', '')
+            results.append({
+                'rank': i + 1,
+                'title': item.get('title', ''),
+                'url': url,
+                'domain': urlparse(url).netloc,
+                'snippet': item.get('snippet', '').replace('\n', ' '),
+            })
 
-        except Exception as e:
-            return {'error': str(e)}
+        return {'results': results, 'keyword': keyword}
 
-    return {'results': results, 'keyword': keyword}
+    except Exception as e:
+        return {'error': str(e)}
 
 
 def highlight_urls(results: list, target_urls: list) -> list:
