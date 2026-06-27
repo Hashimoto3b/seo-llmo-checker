@@ -4,9 +4,10 @@ from dotenv import load_dotenv
 from analyzer.scraper import scrape_page
 from analyzer.ai_judge import get_ai_judgment
 from analyzer.keyword_rank import search_keyword, highlight_urls
-
 from analyzer.aio_analyzer import analyze_aio
 from analyzer.meo_analyzer import analyze_meo
+from analyzer.site_crawler import crawl_site, aggregate_site_data
+from analyzer.site_ai_judge import judge_site
 
 load_dotenv()
 
@@ -123,7 +124,7 @@ with st.sidebar:
 st.title("🔍 SEO関連分析ツール")
 st.caption("AIが検索エンジン対策・AI検索対策・MEO対策を診断します")
 
-tab1, tab2, tab3, tab4 = st.tabs(["📊 SEO・LLMO診断", "🔎 キーワード順位", "🤖 AIO分析", "📍 MEO分析"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 SEO・LLMO診断", "🔎 キーワード順位", "🤖 AIO分析", "📍 MEO分析", "🌐 サイト全体分析"])
 
 
 # =====================
@@ -409,3 +410,109 @@ with tab4:
             diff = action.get('difficulty', '普通')
             with st.expander(f"#{action.get('rank','')}  {action.get('action','')}　{diff_icon.get(diff,'🟡')} {diff}"):
                 st.write(f"**期待効果:** {action.get('expected_effect','')}")
+
+
+# =====================
+# TAB5: サイト全体分析
+# =====================
+with tab5:
+    st.subheader("🌐 サイト全体分析")
+    st.caption("sitemap.xmlまたは内部リンクをたどり、複数ページをまとめて診断します")
+
+    c1, c2 = st.columns([4, 1])
+    with c1:
+        url5 = st.text_input("サイトのURL", placeholder="https://example.com",
+                             label_visibility="collapsed", key="url5")
+    with c2:
+        run5 = st.button("🌐 分析開始", type="primary", use_container_width=True, key="run5")
+
+    max_pages = st.slider("クロール最大ページ数", 5, 30, 15, key="max_pages")
+    st.caption("ページ数が多いほど時間がかかります（目安：10ページ＝約30秒）")
+
+    if run5:
+        if not url5 or not url5.startswith('http'):
+            st.error("正しいURLを入力してください")
+            st.stop()
+        if not gemini_key:
+            st.error("サイドバーにGemini APIキーを設定してください")
+            st.stop()
+
+        with st.status("サイト全体を分析中...", expanded=True) as status:
+            st.write(f"🔍 最大{max_pages}ページをクロール中...")
+            crawl_result = crawl_site(url5, max_pages)
+
+            if not crawl_result.get('pages'):
+                status.update(label="エラー", state="error")
+                st.error("ページを取得できませんでした")
+                st.stop()
+
+            st.write(f"✅ {crawl_result['total_pages']}ページ取得完了")
+            st.write("🤖 AIがサイト全体を診断中...")
+            aggregated = aggregate_site_data(crawl_result)
+            ai_result = judge_site(aggregated, gemini_key)
+
+            if 'error' in ai_result:
+                status.update(label="エラー", state="error")
+                st.error(ai_result['error'])
+                st.stop()
+
+            status.update(label="分析完了！", state="complete")
+
+        st.success(f"✅ {crawl_result['total_pages']}ページの分析が完了しました")
+        st.markdown("---")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            render_score_box("🌐 サイト全体スコア", ai_result.get('site_score'),
+                             ai_result.get('site_status', ''), ai_result.get('site_summary', ''))
+        with col2:
+            st.metric("クロールページ数", f"{crawl_result['total_pages']}ページ")
+            st.metric("平均SEOスコア", f"{aggregated.get('avg_score', 0)}点")
+            src = "sitemap.xml" if crawl_result.get('from_sitemap') else "内部リンク"
+            st.caption(f"取得方法: {src}")
+
+        st.markdown("---")
+        st.subheader("📋 ページ別スコア一覧")
+        pages = crawl_result.get('pages', [])
+
+        def score_emoji(s):
+            return "🟢" if s >= 70 else "🟡" if s >= 40 else "🔴"
+
+        for p in sorted(pages, key=lambda x: x.get('score', 0)):
+            score = p.get('score', 0)
+            issues = p.get('issues', [])
+            issue_str = "　".join(issues) if issues else "問題なし"
+            with st.expander(f"{score_emoji(score)} {score}点　{p['url']}"):
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.write(f"**タイトル:** {p.get('title','（なし）')[:50]}")
+                    st.write(f"**H1数:** {p.get('h1_count',0)}個")
+                    st.write(f"**テキスト量:** {p.get('word_count',0)}語")
+                with c2:
+                    st.write(f"**メタ文字数:** {p.get('meta_description_length',0)}文字")
+                    st.write(f"**altなし画像:** {p.get('images_without_alt',0)}枚")
+                    st.write(f"**内部リンク:** {p.get('internal_links',0)}件")
+                if issues:
+                    st.warning(f"⚠️ 課題: {issue_str}")
+
+        st.markdown("---")
+        st.subheader("⚠️ サイト全体の主要課題")
+        for issue in ai_result.get('top_issues', []):
+            diff_icon = {'簡単': '🟢', '普通': '🟡', '難しい': '🔴'}
+            with st.expander(f"#{issue.get('rank','')} {issue.get('issue','')}　（{issue.get('affected_pages',0)}ページに影響）"):
+                st.write(issue.get('detail', ''))
+                if issue.get('fix'):
+                    st.info(f"💡 改善方法: {issue.get('fix','')}")
+
+        st.markdown("---")
+        st.subheader("✅ 優先改善アクション")
+        diff_icon = {'簡単': '🟢', '普通': '🟡', '難しい': '🔴'}
+        for action in ai_result.get('priority_actions', []):
+            diff = action.get('difficulty', '普通')
+            with st.expander(f"#{action.get('rank','')}  {action.get('action','')}　{diff_icon.get(diff,'🟡')} {diff}"):
+                st.write(f"**期待効果:** {action.get('expected_effect','')}")
+
+        st.markdown("---")
+        st.subheader("📝 ページ種別アドバイス")
+        for advice in ai_result.get('page_type_advice', []):
+            st.markdown(f"**{advice.get('page_type','')}**: {advice.get('advice','')}")
