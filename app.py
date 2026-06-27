@@ -120,8 +120,8 @@ with st.sidebar:
     st.caption("Powered by Google Gemini AI")
 
 # ===== メイン =====
-st.title("🔍 SEO・LLMO 無料診断ツール")
-st.caption("AIが検索エンジン対策・AI検索対策・MEO対策を同時に診断します")
+st.title("🔍 SEO関連分析ツール")
+st.caption("AIが検索エンジン対策・AI検索対策・MEO対策を診断します")
 
 tab1, tab2, tab3, tab4 = st.tabs(["📊 SEO・LLMO診断", "🔎 キーワード順位", "🤖 AIO分析", "📍 MEO分析"])
 
